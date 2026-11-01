@@ -7,7 +7,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.widget.Toast
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -105,6 +106,9 @@ class MainActivity : ComponentActivity() {
                 }) { Text("Cancelar") }
             }
             Text(status)
+            HorizontalDivider()
+            Text("Biblioteca local", style = MaterialTheme.typography.titleLarge)
+            AudioLibrary()
             Text("MP3: codificador ainda não integrado. Não há download de páginas do YouTube.",
                 style = MaterialTheme.typography.bodySmall)
         }
