@@ -47,7 +47,11 @@ class MainActivity : ComponentActivity() {
         var selected by remember { mutableStateOf<Uri?>(null) }
         var busy by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("Pronto para começar") }
-        var downloadId by remember { mutableStateOf<Long?>(null) }
+        val preferences = remember { getSharedPreferences("player_downloads", Context.MODE_PRIVATE) }
+        var downloadId by remember { mutableStateOf(preferences.getLong("active_id", -1L).takeIf { it > 0 }) }
+        var downloadError by remember { mutableStateOf("") }
+        var downloadBytes by remember { mutableLongStateOf(0L) }
+        var downloadTotal by remember { mutableLongStateOf(-1L) }
         var downloadProgress by remember { mutableFloatStateOf(0f) }
         var downloadState by remember { mutableStateOf("") }
         var page by remember { mutableIntStateOf(0) }
@@ -68,13 +72,28 @@ class MainActivity : ComponentActivity() {
                         val state = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                         val downloaded = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
                         val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                        downloadBytes = downloaded
+                        downloadTotal = total
+                        val reason = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                        downloadError = if (state == DownloadManager.STATUS_FAILED) when (reason) {
+                            1001 -> "Arquivo não encontrado no servidor."
+                            1002 -> "Erro de conexão ou resposta HTTP inválida."
+                            1004 -> "Não foi possível acessar o destino do arquivo."
+                            1005 -> "Espaço de armazenamento insuficiente."
+                            1006 -> "Dispositivo de armazenamento indisponível."
+                            1007 -> "O arquivo já existe no destino."
+                            1008 -> "Não foi possível continuar o download."
+                            1009 -> "Erro de armazenamento ou gravação."
+                            in 400..599 -> "Servidor respondeu HTTP $reason."
+                            else -> "Erro do Android: código $reason."
+                        } else ""
                         downloadProgress = if (total > 0) (downloaded.toFloat() / total).coerceIn(0f, 1f) else 0f
                         downloadState = when (state) {
                             DownloadManager.STATUS_PENDING -> "Na fila"
                             DownloadManager.STATUS_RUNNING -> if (total > 0) "Baixando: ${(downloadProgress * 100).toInt()}%" else "Baixando: ${downloaded / 1024} KB"
                             DownloadManager.STATUS_PAUSED -> "Download pausado pelo sistema"
                             DownloadManager.STATUS_SUCCESSFUL -> "Download concluído! Confira Downloads."
-                            DownloadManager.STATUS_FAILED -> "Falha no download. Verifique o link e a conexão."
+                            DownloadManager.STATUS_FAILED -> "Falha no download: $downloadError"
                             else -> "Verificando download"
                         }
                         state == DownloadManager.STATUS_SUCCESSFUL || state == DownloadManager.STATUS_FAILED
@@ -128,9 +147,10 @@ class MainActivity : ComponentActivity() {
                                                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                                                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
                                             downloadId = manager.enqueue(request)
+                                            preferences.edit().putLong("active_id", downloadId!!).apply()
                                             downloadProgress = 0f
                                             downloadState = "Na fila"
-                                            status = "Download iniciado"
+                                            status = "Download enviado ao Android. Aguardando transferência."
                                             page = 1
                                         } catch (e: Exception) {
                                             status = "Não foi possível iniciar o download: ${e.localizedMessage}"
@@ -172,20 +192,26 @@ class MainActivity : ComponentActivity() {
                         Text("Downloads", style = MaterialTheme.typography.headlineSmall)
                         Card {
                             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(if (downloadId == null) "Nenhum download nesta sessão" else downloadState)
+                                Text(if (downloadId == null) "Nenhum download ativo" else downloadState)
+                                if (downloadId != null) {
+                                    Text("Recebidos: ${downloadBytes / 1024} KB" +
+                                        if (downloadTotal > 0) " de ${downloadTotal / 1024} KB" else " (tamanho desconhecido)")
+                                    Text("Tarefa Android: #$downloadId", style = MaterialTheme.typography.bodySmall)
+                                }
                                 if (downloadId != null) {
                                     LinearProgressIndicator(progress = { downloadProgress }, modifier = Modifier.fillMaxWidth())
                                     if (downloadState != "Download concluído! Confira Downloads.") {
                                         OutlinedButton(onClick = {
                                             downloadId?.let { manager.remove(it) }
                                             downloadId = null
+                                            preferences.edit().remove("active_id").apply()
                                             downloadState = "Download cancelado"
                                         }) { Text("Cancelar download") }
                                     }
                                 }
                             }
                         }
-                        Text("O Android mantém o download em segundo plano. O progresso nesta tela acompanha a tarefa atual.")
+                        Text("O download é acompanhado pelo Android e a tarefa atual é recuperada ao reabrir o aplicativo.")
                     }
                     2 -> {
                         Text("Meus áudios", style = MaterialTheme.typography.headlineSmall)
