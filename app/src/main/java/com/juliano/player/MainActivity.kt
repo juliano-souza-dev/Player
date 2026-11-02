@@ -29,6 +29,8 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +58,11 @@ class MainActivity : ComponentActivity() {
         var downloadState by remember { mutableStateOf("") }
         var page by remember { mutableIntStateOf(0) }
         val manager = remember { getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager }
+        val scope = rememberCoroutineScope()
+        val mediaEngine = remember { MediaDownloadEngine(this@MainActivity) }
+        var mediaBusy by remember { mutableStateOf(false) }
+        var mediaProgress by remember { mutableFloatStateOf(0f) }
+        var mediaMessage by remember { mutableStateOf("") }
         val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             selected = uri
             if (uri != null) status = "Vídeo selecionado"
@@ -125,9 +132,9 @@ class MainActivity : ComponentActivity() {
                     0 -> {
                         Card(shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                Text("Baixar vídeo", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("Baixar vídeo ou MP3", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                                 OutlinedTextField(value = url, onValueChange = { url = it },
-                                    label = { Text("Cole um link direto de MP4") },
+                                    label = { Text("Cole o link do vídeo") },
                                     modifier = Modifier.fillMaxWidth(), singleLine = true,
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
                                 Button(onClick = {
@@ -159,6 +166,48 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }, modifier = Modifier.fillMaxWidth()) { Text("BAIXAR MP4") }
+                                Text("Links de plataformas compatíveis")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(enabled = !mediaBusy, onClick = {
+                                        mediaBusy = true
+                                        mediaMessage = "Preparando motor de download..."
+                                        mediaProgress = 0f
+                                        scope.launch {
+                                            try {
+                                                mediaEngine.initialize()
+                                                mediaMessage = "Conectando..."
+                                                val result = mediaEngine.download(url.trim(), false) { p, message ->
+                                                    runOnUiThread { mediaProgress = (p / 100f).coerceIn(0f, 1f); mediaMessage = message }
+                                                }
+                                                mediaMessage = result.fold(
+                                                    { "Vídeo salvo: ${it.name}" },
+                                                    { "Erro: ${it.localizedMessage ?: "Não foi possível baixar"}" }
+                                                )
+                                            } catch (e: Exception) { mediaMessage = "Erro: ${e.localizedMessage}" }
+                                            finally { mediaBusy = false }
+                                        }
+                                    }) { Text("Vídeo") }
+                                    Button(enabled = !mediaBusy, onClick = {
+                                        mediaBusy = true
+                                        mediaMessage = "Preparando conversão MP3..."
+                                        mediaProgress = 0f
+                                        scope.launch {
+                                            try {
+                                                mediaEngine.initialize()
+                                                val result = mediaEngine.download(url.trim(), true) { p, message ->
+                                                    runOnUiThread { mediaProgress = (p / 100f).coerceIn(0f, 1f); mediaMessage = message }
+                                                }
+                                                mediaMessage = result.fold(
+                                                    { "MP3 salvo: ${it.name}" },
+                                                    { "Erro: ${it.localizedMessage ?: "Não foi possível converter"}" }
+                                                )
+                                            } catch (e: Exception) { mediaMessage = "Erro: ${e.localizedMessage}" }
+                                            finally { mediaBusy = false }
+                                        }
+                                    }) { Text("MP3") }
+                                }
+                                if (mediaBusy) LinearProgressIndicator(progress = { mediaProgress }, modifier = Modifier.fillMaxWidth())
+                                if (mediaMessage.isNotBlank()) Text(mediaMessage, color = Color(0xFFFFCF70))
                                 if (status.isNotBlank()) Text(status, color = Color(0xFFFFCF70))
                             }
                         }
