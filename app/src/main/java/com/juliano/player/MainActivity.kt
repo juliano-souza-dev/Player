@@ -147,7 +147,9 @@ class MainActivity : ComponentActivity() {
                                                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                                                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
                                             downloadId = manager.enqueue(request)
-                                            preferences.edit().putLong("active_id", downloadId!!).apply()
+                                            val oldIds = preferences.getString("history", "").orEmpty().split(",").filter { it.isNotBlank() }
+                                            preferences.edit().putLong("active_id", downloadId!!)
+                                                .putString("history", (listOf(downloadId.toString()) + oldIds).distinct().take(100).joinToString(",")).apply()
                                             downloadProgress = 0f
                                             downloadState = "Na fila"
                                             status = "Download enviado ao Android. Aguardando transferência."
@@ -211,7 +213,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                        Text("O download é acompanhado pelo Android e a tarefa atual é recuperada ao reabrir o aplicativo.")
+                        Text("Histórico de downloads")
+                        DownloadHistory(this@MainActivity, manager) { message -> status = message }
+                        if (status.isNotBlank()) Text(status)
                     }
                     2 -> {
                         Text("Meus áudios", style = MaterialTheme.typography.headlineSmall)
