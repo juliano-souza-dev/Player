@@ -10,8 +10,8 @@ android {
         applicationId = "com.juliano.player"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
     buildFeatures { compose = true }
     compileOptions {
@@ -28,4 +28,6 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.media3:media3-transformer:1.5.1")
     implementation("androidx.media3:media3-common:1.5.1")
+    implementation("com.github.yausername.youtubedl-android:library:0.18.1")
+    implementation("com.github.yausername.youtubedl-android:ffmpeg:0.18.1")
 }
